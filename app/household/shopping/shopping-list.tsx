@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Users, User, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 type ShoppingItem = {
   id: string;
@@ -14,6 +15,7 @@ type ShoppingItem = {
   is_checked: boolean;
   added_by: string;
   checked_by: string | null;
+  owner_user_id: string | null;
 };
 
 export function ShoppingList({
@@ -30,6 +32,7 @@ export function ShoppingList({
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [scope, setScope] = useState<"shared" | "personal">("shared");
 
   useEffect(() => {
     const supabase = createClient();
@@ -80,6 +83,7 @@ export function ShoppingList({
       name: trimmed,
       quantity: quantity.trim() || null,
       added_by: currentUserId,
+      owner_user_id: scope === "personal" ? currentUserId : null,
     });
 
     setName("");
@@ -104,77 +108,131 @@ export function ShoppingList({
     await supabase.from("shopping_items").delete().eq("id", id);
   }
 
-  const pending = items.filter((i) => !i.is_checked);
-  const checked = items.filter((i) => i.is_checked);
+  const shared = items.filter((i) => !i.owner_user_id);
+  const mine = items.filter((i) => i.owner_user_id === currentUserId);
+  const others = items.filter(
+    (i) => i.owner_user_id && i.owner_user_id !== currentUserId
+  );
+  const othersByOwner = others.reduce<Record<string, ShoppingItem[]>>((acc, item) => {
+    const key = item.owner_user_id!;
+    acc[key] = acc[key] ?? [];
+    acc[key].push(item);
+    return acc;
+  }, {});
 
   return (
-    <div className="flex flex-col gap-4">
-      <form onSubmit={addItem} className="flex gap-2">
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Leche"
-          className="flex-1"
-        />
-        <Input
-          value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
-          placeholder="2L"
-          className="w-20"
-        />
-        <Button type="submit" size="icon" aria-label="Añadir">
-          <Plus className="size-4" />
-        </Button>
+    <div className="flex flex-col gap-5">
+      <form onSubmit={addItem} className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Leche"
+            className="flex-1"
+          />
+          <Input
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="2L"
+            className="w-20"
+          />
+          <Button type="submit" size="icon" aria-label="Añadir">
+            <Plus className="size-4" />
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant={scope === "shared" ? "default" : "outline"}
+            onClick={() => setScope("shared")}
+            className="flex-1"
+          >
+            <Users className="size-4" />
+            Compartido
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={scope === "personal" ? "default" : "outline"}
+            onClick={() => setScope("personal")}
+            className="flex-1"
+          >
+            <User className="size-4" />
+            Solo para mí
+          </Button>
+        </div>
       </form>
 
-      <div className="flex flex-col gap-2">
-        {pending.length === 0 && (
-          <p className="text-sm text-muted-foreground">Nada pendiente por comprar.</p>
-        )}
-        {pending.map((item) => (
-          <div key={item.id} className="flex items-center gap-2 text-sm">
-            <Checkbox checked={item.is_checked} onCheckedChange={() => toggleItem(item)} />
-            <span className="flex-1">
-              {item.name}
-              {item.quantity ? ` (${item.quantity})` : ""}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              {memberNames[item.added_by]}
-            </span>
+      <ShoppingGroup
+        title="Compartido"
+        items={shared}
+        editable
+        onToggle={toggleItem}
+        onDelete={deleteItem}
+      />
+
+      <ShoppingGroup
+        title="Mi comida"
+        items={mine}
+        editable
+        onToggle={toggleItem}
+        onDelete={deleteItem}
+      />
+
+      {Object.entries(othersByOwner).map(([ownerId, ownerItems]) => (
+        <ShoppingGroup
+          key={ownerId}
+          title={`Comida de ${memberNames[ownerId] ?? "—"}`}
+          items={ownerItems}
+          editable={false}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ShoppingGroup({
+  title,
+  items,
+  editable,
+  onToggle,
+  onDelete,
+}: {
+  title: string;
+  items: ShoppingItem[];
+  editable: boolean;
+  onToggle?: (item: ShoppingItem) => void;
+  onDelete?: (id: string) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-medium text-muted-foreground">{title}</p>
+      {items.map((item) => (
+        <div key={item.id} className="flex items-center gap-2 text-sm">
+          <Checkbox
+            checked={item.is_checked}
+            disabled={!editable}
+            onCheckedChange={() => editable && onToggle?.(item)}
+          />
+          <span className={cn("flex-1", item.is_checked && "text-muted-foreground line-through")}>
+            {item.name}
+            {item.quantity ? ` (${item.quantity})` : ""}
+          </span>
+          {editable && (
             <button
               type="button"
-              onClick={() => deleteItem(item.id)}
+              onClick={() => onDelete?.(item.id)}
               aria-label="Quitar"
               className="text-muted-foreground hover:text-destructive"
             >
               <X className="size-4" />
             </button>
-          </div>
-        ))}
-      </div>
-
-      {checked.length > 0 && (
-        <div className="flex flex-col gap-2 border-t pt-3">
-          <p className="text-xs text-muted-foreground">Comprado</p>
-          {checked.map((item) => (
-            <div key={item.id} className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Checkbox checked={item.is_checked} onCheckedChange={() => toggleItem(item)} />
-              <span className="flex-1 line-through">
-                {item.name}
-                {item.quantity ? ` (${item.quantity})` : ""}
-              </span>
-              <button
-                type="button"
-                onClick={() => deleteItem(item.id)}
-                aria-label="Quitar"
-                className="hover:text-destructive"
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }

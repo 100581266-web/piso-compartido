@@ -15,7 +15,7 @@ export default async function ShoppingPage() {
 
   const { data: items } = await supabase
     .from("shopping_items")
-    .select("id, name, quantity, is_checked, added_by, checked_by")
+    .select("id, name, quantity, is_checked, added_by, checked_by, owner_user_id")
     .eq("household_id", household.id)
     .order("created_at", { ascending: true });
 
