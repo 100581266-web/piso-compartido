@@ -1,4 +1,4 @@
-import { Receipt, Wallet, Repeat, History } from "lucide-react";
+import { Receipt, Repeat, History } from "lucide-react";
 import { requireHousehold, getHouseholdMembers } from "@/lib/household";
 import { computeBalances, simplifyDebts } from "@/lib/debt-simplify";
 import { formatCents, formatDate } from "@/lib/format";
@@ -59,7 +59,6 @@ export default async function ExpensesPage() {
   );
 
   const transactions = simplifyDebts(balances);
-  const myBalance = balances.get(user.id) ?? 0;
 
   const participantsByExpense = (shares ?? []).reduce<Record<string, string[]>>((acc, s) => {
     acc[s.expense_id] = acc[s.expense_id] ?? [];
@@ -69,31 +68,6 @@ export default async function ExpensesPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
-      <Card
-        className={cn(
-          "border-none text-primary-foreground",
-          myBalance > 0 && "bg-green-600",
-          myBalance < 0 && "bg-destructive",
-          myBalance === 0 && "bg-muted text-foreground"
-        )}
-      >
-        <CardContent className="flex items-center gap-3 py-2">
-          <div className="flex size-10 items-center justify-center rounded-full bg-white/15">
-            <Wallet className="size-5" />
-          </div>
-          <div>
-            <p className="text-xs opacity-80">Tu saldo</p>
-            <p className="text-lg font-semibold">
-              {myBalance === 0
-                ? "Estás al día"
-                : myBalance > 0
-                  ? `Te deben ${formatCents(myBalance)}`
-                  : `Debes ${formatCents(-myBalance)}`}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       <Card>
         <CardHeader>
           <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
@@ -138,10 +112,15 @@ export default async function ExpensesPage() {
                     {m.displayName.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className="flex-1">{m.displayName}</span>
+                <span className="flex-1">
+                  {m.displayName}
+                  {m.userId === user.id && (
+                    <span className="text-muted-foreground"> (tú)</span>
+                  )}
+                </span>
                 <span
                   className={cn(
-                    "font-medium",
+                    "text-sm font-medium",
                     amount > 0 && "text-green-600",
                     amount < 0 && "text-destructive",
                     amount === 0 && "text-muted-foreground"

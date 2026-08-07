@@ -22,3 +22,37 @@ export function nextDueDate(fromDate: Date, recurrenceDays: number): Date {
   next.setDate(next.getDate() + recurrenceDays);
   return next;
 }
+
+export type ChoreOccurrence = {
+  date: Date;
+  assignedTo: string;
+};
+
+/**
+ * Projects a chore's occurrences forward from its current real assignment
+ * up to (and including) `until`, assuming everyone completes on time. Only
+ * the first occurrence returned corresponds to a real chore_assignment row
+ * in the database — the rest are estimates for calendar display, and shift
+ * automatically if someone finishes early or late.
+ */
+export function projectChoreOccurrences(
+  rotationOrder: string[],
+  recurrenceDays: number,
+  firstAssignee: string,
+  firstDueDate: Date,
+  until: Date
+): ChoreOccurrence[] {
+  const occurrences: ChoreOccurrence[] = [];
+  let assignee = firstAssignee;
+  let date = firstDueDate;
+  let safety = 0;
+
+  while (date <= until && safety < 366) {
+    occurrences.push({ date: new Date(date), assignedTo: assignee });
+    assignee = nextAssignee(rotationOrder, assignee);
+    date = nextDueDate(date, recurrenceDays);
+    safety++;
+  }
+
+  return occurrences;
+}

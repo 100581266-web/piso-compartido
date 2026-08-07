@@ -51,7 +51,8 @@ export async function getHouseholdMembers(
   const { data } = await supabase
     .from("household_members")
     .select("user_id, role, profiles(display_name)")
-    .eq("household_id", householdId);
+    .eq("household_id", householdId)
+    .order("joined_at", { ascending: true });
 
   return (data ?? []).map((m) => {
     const profile = m.profiles as unknown as { display_name: string | null } | null;

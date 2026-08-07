@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Users, User, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { groceryEmoji } from "@/lib/emoji-match";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -218,7 +219,7 @@ function ShoppingGroup({
             onCheckedChange={() => editable && onToggle?.(item)}
           />
           <span className={cn("flex-1", item.is_checked && "text-muted-foreground line-through")}>
-            {item.name}
+            {groceryEmoji(item.name)} {item.name}
             {item.quantity ? ` (${item.quantity})` : ""}
           </span>
           {editable && (
