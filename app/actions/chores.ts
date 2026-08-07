@@ -62,6 +62,53 @@ export async function addChore(
   }
 
   revalidatePath("/household/chores");
+  revalidatePath("/household");
+}
+
+export async function updateChore(
+  _prevState: ChoreFormState,
+  formData: FormData
+): Promise<ChoreFormState> {
+  const choreId = String(formData.get("chore_id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const recurrenceDays = Number(formData.get("recurrence_days"));
+
+  if (!name) {
+    return { error: "Ponle un nombre a la tarea." };
+  }
+  if (!recurrenceDays || recurrenceDays <= 0) {
+    return { error: "Indica cada cuántos días se repite." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("chores")
+    .update({ name, recurrence_days: recurrenceDays })
+    .eq("id", choreId);
+
+  if (error) {
+    return { error: "No se ha podido actualizar la tarea: " + error.message };
+  }
+
+  revalidatePath("/household/chores");
+  revalidatePath("/household");
+}
+
+export async function deleteChore(
+  _prevState: ChoreFormState,
+  formData: FormData
+): Promise<ChoreFormState> {
+  const choreId = String(formData.get("chore_id") ?? "");
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("chores").delete().eq("id", choreId);
+
+  if (error) {
+    return { error: "No se ha podido borrar la tarea: " + error.message };
+  }
+
+  revalidatePath("/household/chores");
+  revalidatePath("/household");
 }
 
 export async function completeChore(
@@ -117,4 +164,5 @@ export async function completeChore(
   }
 
   revalidatePath("/household/chores");
+  revalidatePath("/household");
 }

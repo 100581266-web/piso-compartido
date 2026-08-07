@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Receipt, ListChecks, ShoppingCart } from "lucide-react";
+import { Home, Receipt, ListChecks, ShoppingCart, ChartColumn } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
@@ -10,6 +10,7 @@ const tabs = [
   { href: "/household/expenses", label: "Gastos", icon: Receipt },
   { href: "/household/chores", label: "Tareas", icon: ListChecks },
   { href: "/household/shopping", label: "Compra", icon: ShoppingCart },
+  { href: "/household/stats", label: "Stats", icon: ChartColumn },
 ];
 
 export function BottomNav() {

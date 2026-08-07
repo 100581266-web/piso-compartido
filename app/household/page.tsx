@@ -1,5 +1,12 @@
+import Link from "next/link";
+import { Receipt, ListChecks, ShoppingCart, ChevronRight } from "lucide-react";
 import { getHouseholdMembers, requireHousehold } from "@/lib/household";
+import { computeBalances } from "@/lib/debt-simplify";
+import { formatCents, formatDate, isOverdue, isToday } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { InviteCode } from "./invite-code";
+import { RenameHouseholdForm } from "./rename-household-form";
+import { RemoveMemberButton } from "./remove-member-button";
 import {
   Card,
   CardContent,
@@ -11,20 +18,116 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth";
+import { leaveHousehold } from "@/app/actions/household";
 
 export default async function HouseholdPage() {
-  const { supabase, household } = await requireHousehold();
+  const { supabase, user, household } = await requireHousehold();
   const members = await getHouseholdMembers(supabase, household.id);
+
+  const [{ data: expenses }, { data: shares }, { data: settlements }, { data: nextChore }, { count: pendingShoppingCount }] =
+    await Promise.all([
+      supabase
+        .from("expenses")
+        .select("paid_by, amount_cents")
+        .eq("household_id", household.id),
+      supabase
+        .from("expense_shares")
+        .select("user_id, share_cents")
+        .eq("household_id", household.id),
+      supabase
+        .from("settlements")
+        .select("from_user_id, to_user_id, amount_cents")
+        .eq("household_id", household.id),
+      supabase
+        .from("chore_assignments")
+        .select("due_date, chores(name)")
+        .eq("household_id", household.id)
+        .eq("status", "pending")
+        .eq("assigned_to", user.id)
+        .order("due_date", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("shopping_items")
+        .select("id", { count: "exact", head: true })
+        .eq("household_id", household.id)
+        .eq("is_checked", false),
+    ]);
+
+  const balances = computeBalances(
+    (expenses ?? []).map((e) => ({ paidBy: e.paid_by, amountCents: e.amount_cents })),
+    (shares ?? []).map((s) => ({ userId: s.user_id, shareCents: s.share_cents })),
+    (settlements ?? []).map((s) => ({
+      fromUserId: s.from_user_id,
+      toUserId: s.to_user_id,
+      amountCents: s.amount_cents,
+    }))
+  );
+  const myBalance = balances.get(user.id) ?? 0;
+
+  const chore = nextChore?.chores as unknown as { name: string } | null;
+  const isAdmin = members.find((m) => m.userId === user.id)?.role === "admin";
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
+      <div className="flex flex-col gap-2">
+        <StatCard
+          href="/household/expenses"
+          icon={<Receipt className="size-4" />}
+          label="Gastos"
+          value={
+            myBalance === 0
+              ? "Estás al día"
+              : myBalance > 0
+                ? `Te deben ${formatCents(myBalance)}`
+                : `Debes ${formatCents(-myBalance)}`
+          }
+          tone={myBalance > 0 ? "positive" : myBalance < 0 ? "negative" : "neutral"}
+        />
+        <StatCard
+          href="/household/chores"
+          icon={<ListChecks className="size-4" />}
+          label="Tareas"
+          value={
+            !chore
+              ? "Nada pendiente para ti"
+              : `${chore.name} · ${
+                  isOverdue(nextChore!.due_date)
+                    ? "atrasada"
+                    : isToday(nextChore!.due_date)
+                      ? "hoy"
+                      : formatDate(nextChore!.due_date)
+                }`
+          }
+          tone={chore && isOverdue(nextChore!.due_date) ? "negative" : "neutral"}
+        />
+        <StatCard
+          href="/household/shopping"
+          icon={<ShoppingCart className="size-4" />}
+          label="Compra"
+          value={
+            !pendingShoppingCount
+              ? "Lista vacía"
+              : `${pendingShoppingCount} artículo${pendingShoppingCount === 1 ? "" : "s"} pendiente${pendingShoppingCount === 1 ? "" : "s"}`
+          }
+          tone="neutral"
+        />
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Invita a tus compañeros</CardTitle>
           <CardDescription>Comparte este código o el enlace</CardDescription>
         </CardHeader>
-        <CardContent>
-          <InviteCode code={household.invite_code} />
+        <CardContent className="flex flex-col gap-3">
+          <InviteCode
+            code={household.invite_code}
+            householdId={household.id}
+            isAdmin={isAdmin}
+          />
+          {isAdmin && (
+            <RenameHouseholdForm householdId={household.id} name={household.name} />
+          )}
         </CardContent>
       </Card>
 
@@ -42,10 +145,24 @@ export default async function HouseholdPage() {
               </Avatar>
               <span className="flex-1 text-sm">{m.displayName}</span>
               {m.role === "admin" && <Badge variant="secondary">admin</Badge>}
+              {isAdmin && m.userId !== user.id && (
+                <RemoveMemberButton
+                  householdId={household.id}
+                  userId={m.userId}
+                  displayName={m.displayName}
+                />
+              )}
             </div>
           ))}
         </CardContent>
       </Card>
+
+      <form action={leaveHousehold}>
+        <input type="hidden" name="household_id" value={household.id} />
+        <Button type="submit" variant="outline" className="w-full">
+          Salir del piso
+        </Button>
+      </form>
 
       <form action={signOut}>
         <Button type="submit" variant="ghost" className="w-full">
@@ -53,5 +170,42 @@ export default async function HouseholdPage() {
         </Button>
       </form>
     </div>
+  );
+}
+
+function StatCard({
+  href,
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: "positive" | "negative" | "neutral";
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-xl border bg-card p-3 transition-colors hover:bg-muted/50"
+    >
+      <div
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-full",
+          tone === "positive" && "bg-green-600/15 text-green-600",
+          tone === "negative" && "bg-destructive/15 text-destructive",
+          tone === "neutral" && "bg-primary/15 text-primary"
+        )}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-medium">{value}</p>
+      </div>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }

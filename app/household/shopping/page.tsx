@@ -1,3 +1,4 @@
+import { ShoppingCart } from "lucide-react";
 import { requireHousehold, getHouseholdMembers } from "@/lib/household";
 import { ShoppingList } from "./shopping-list";
 import {
@@ -23,6 +24,9 @@ export default async function ShoppingPage() {
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
       <Card>
         <CardHeader>
+          <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <ShoppingCart className="size-4" />
+          </div>
           <CardTitle className="text-base">Lista de la compra</CardTitle>
           <CardDescription>Se actualiza al momento para todos</CardDescription>
         </CardHeader>

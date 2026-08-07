@@ -1,19 +1,30 @@
 import { requireHousehold } from "@/lib/household";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BottomNav } from "./bottom-nav";
+import { NotificationBell } from "./notification-bell";
 
 export default async function HouseholdLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { household } = await requireHousehold();
+  const { supabase, user, household } = await requireHousehold();
+
+  const { data: notifications } = await supabase
+    .from("notifications")
+    .select("id, message, link, is_read, created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(20);
 
   return (
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-30 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
         <span className="font-semibold">{household.name}</span>
-        <ThemeToggle />
+        <div className="flex items-center">
+          <NotificationBell userId={user.id} initialNotifications={notifications ?? []} />
+          <ThemeToggle />
+        </div>
       </header>
       <main className="flex flex-1 flex-col pb-16">{children}</main>
       <BottomNav />

@@ -1,8 +1,13 @@
+import { Receipt, Wallet, Repeat } from "lucide-react";
 import { requireHousehold, getHouseholdMembers } from "@/lib/household";
 import { computeBalances, simplifyDebts } from "@/lib/debt-simplify";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { CATEGORY_ICONS, type ExpenseCategory } from "@/lib/categories";
 import { AddExpenseForm } from "./add-expense-form";
 import { SettleButton } from "./settle-button";
+import { ExpenseRowActions } from "./expense-row-actions";
+import { RecurringExpenses } from "./recurring-expenses";
 import {
   Card,
   CardContent,
@@ -10,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default async function ExpensesPage() {
   const { supabase, user, household } = await requireHousehold();
@@ -17,22 +23,28 @@ export default async function ExpensesPage() {
   const nameOf = (userId: string) =>
     members.find((m) => m.userId === userId)?.displayName ?? "—";
 
-  const [{ data: expenses }, { data: shares }, { data: settlements }] = await Promise.all([
-    supabase
-      .from("expenses")
-      .select("id, description, amount_cents, paid_by, expense_date")
-      .eq("household_id", household.id)
-      .order("expense_date", { ascending: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("expense_shares")
-      .select("expense_id, user_id, share_cents")
-      .eq("household_id", household.id),
-    supabase
-      .from("settlements")
-      .select("from_user_id, to_user_id, amount_cents")
-      .eq("household_id", household.id),
-  ]);
+  const [{ data: expenses }, { data: shares }, { data: settlements }, { data: recurring }] =
+    await Promise.all([
+      supabase
+        .from("expenses")
+        .select("id, description, amount_cents, paid_by, expense_date, category")
+        .eq("household_id", household.id)
+        .order("expense_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("expense_shares")
+        .select("expense_id, user_id, share_cents")
+        .eq("household_id", household.id),
+      supabase
+        .from("settlements")
+        .select("from_user_id, to_user_id, amount_cents")
+        .eq("household_id", household.id),
+      supabase
+        .from("recurring_expenses")
+        .select("id, description, amount_cents, category, day_of_month, paid_by, active")
+        .eq("household_id", household.id)
+        .order("created_at", { ascending: true }),
+    ]);
 
   const balances = computeBalances(
     (expenses ?? []).map((e) => ({ paidBy: e.paid_by, amountCents: e.amount_cents })),
@@ -45,37 +57,87 @@ export default async function ExpensesPage() {
   );
 
   const transactions = simplifyDebts(balances);
+  const myBalance = balances.get(user.id) ?? 0;
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Añadir gasto</CardTitle>
-          <CardDescription>Se reparte a partes iguales entre todos</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AddExpenseForm householdId={household.id} />
+      <Card
+        className={cn(
+          "border-none text-primary-foreground",
+          myBalance > 0 && "bg-green-600",
+          myBalance < 0 && "bg-destructive",
+          myBalance === 0 && "bg-muted text-foreground"
+        )}
+      >
+        <CardContent className="flex items-center gap-3 py-2">
+          <div className="flex size-10 items-center justify-center rounded-full bg-white/15">
+            <Wallet className="size-5" />
+          </div>
+          <div>
+            <p className="text-xs opacity-80">Tu saldo</p>
+            <p className="text-lg font-semibold">
+              {myBalance === 0
+                ? "Estás al día"
+                : myBalance > 0
+                  ? `Te deben ${formatCents(myBalance)}`
+                  : `Debes ${formatCents(-myBalance)}`}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Saldos</CardTitle>
+          <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Receipt className="size-4" />
+          </div>
+          <CardTitle className="text-base">Añadir gasto</CardTitle>
+          <CardDescription>Se reparte a partes iguales entre todos</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent>
+          <AddExpenseForm householdId={household.id} members={members} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Repeat className="size-4" />
+          </div>
+          <CardTitle className="text-base">Gastos fijos</CardTitle>
+          <CardDescription>Alquiler, wifi, luz... se crean solos cada mes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RecurringExpenses
+            householdId={household.id}
+            members={members}
+            recurring={recurring ?? []}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Saldos del piso</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
           {members.map((m) => {
             const amount = balances.get(m.userId) ?? 0;
             return (
-              <div key={m.userId} className="flex items-center justify-between text-sm">
-                <span>{m.displayName}</span>
+              <div key={m.userId} className="flex items-center gap-3 text-sm">
+                <Avatar className="size-8">
+                  <AvatarFallback className="bg-primary/15 text-xs text-primary">
+                    {m.displayName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="flex-1">{m.displayName}</span>
                 <span
-                  className={
-                    amount > 0
-                      ? "text-green-600"
-                      : amount < 0
-                        ? "text-destructive"
-                        : "text-muted-foreground"
-                  }
+                  className={cn(
+                    "font-medium",
+                    amount > 0 && "text-green-600",
+                    amount < 0 && "text-destructive",
+                    amount === 0 && "text-muted-foreground"
+                  )}
                 >
                   {amount === 0
                     ? "al día"
@@ -96,7 +158,7 @@ export default async function ExpensesPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {transactions.map((t) => (
-              <div key={`${t.from}-${t.to}`} className="flex items-center justify-between text-sm">
+              <div key={`${t.from}-${t.to}`} className="flex items-center justify-between gap-2 text-sm">
                 <span>
                   {nameOf(t.from)} debe {formatCents(t.amountCents)} a {nameOf(t.to)}
                 </span>
@@ -118,19 +180,39 @@ export default async function ExpensesPage() {
         <CardHeader>
           <CardTitle className="text-base">Gastos recientes</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-2">
+        <CardContent className="flex flex-col gap-3">
           {(expenses ?? []).length === 0 && (
-            <p className="text-sm text-muted-foreground">Todavía no hay gastos.</p>
-          )}
-          {(expenses ?? []).map((e) => (
-            <div key={e.id} className="flex items-center justify-between text-sm">
-              <span>
-                {e.description}{" "}
-                <span className="text-muted-foreground">— {nameOf(e.paid_by)}</span>
-              </span>
-              <span>{formatCents(e.amount_cents)}</span>
+            <div className="flex flex-col items-center gap-2 py-6 text-center">
+              <Receipt className="size-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                Todavía no hay gastos. Añade el primero arriba.
+              </p>
             </div>
-          ))}
+          )}
+          {(expenses ?? []).map((e) => {
+            const category = (e.category ?? "otros") as ExpenseCategory;
+            const CategoryIcon = CATEGORY_ICONS[category];
+            return (
+              <div key={e.id} className="flex items-center gap-3 text-sm">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                  <CategoryIcon className="size-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">{e.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {nameOf(e.paid_by)} · {formatDate(e.expense_date)}
+                  </p>
+                </div>
+                <span className="font-medium">{formatCents(e.amount_cents)}</span>
+                <ExpenseRowActions
+                  expenseId={e.id}
+                  description={e.description}
+                  amountCents={e.amount_cents}
+                  category={category}
+                />
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>
