@@ -21,27 +21,27 @@ export function PushPrompt({ userId }: { userId: string }) {
   const [subscribing, setSubscribing] = useState(false);
 
   useEffect(() => {
-    const dismissed = localStorage.getItem("push-prompt-dismissed");
     const supported =
       "Notification" in window && "serviceWorker" in navigator && "PushManager" in window;
+    if (!supported) return;
 
-    if (supported && !dismissed && Notification.permission === "default") {
+    // El permiso ya estaba concedido de una vez anterior (p.ej. porque en su
+    // momento fallara el guardado en Supabase): reintenta en silencio en vez
+    // de esperar a que el usuario pulse "Activar" otra vez.
+    if (Notification.permission === "granted") {
+      saveSubscription();
+      return;
+    }
+
+    const dismissed = localStorage.getItem("push-prompt-dismissed");
+    if (!dismissed && Notification.permission === "default") {
       setVisible(true);
     }
   }, []);
 
-  async function subscribe() {
+  async function saveSubscription() {
     const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     if (!vapidPublicKey) return;
-
-    setSubscribing(true);
-
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      setSubscribing(false);
-      setVisible(false);
-      return;
-    }
 
     const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.subscribe({
@@ -60,6 +60,15 @@ export function PushPrompt({ userId }: { userId: string }) {
       },
       { onConflict: "endpoint" }
     );
+  }
+
+  async function subscribe() {
+    setSubscribing(true);
+
+    const permission = await Notification.requestPermission();
+    if (permission === "granted") {
+      await saveSubscription();
+    }
 
     setSubscribing(false);
     setVisible(false);
