@@ -123,6 +123,7 @@ export default async function HouseholdPage() {
           <InviteCode
             code={household.invite_code}
             householdId={household.id}
+            householdName={household.name}
             isAdmin={isAdmin}
           />
           {isAdmin && (

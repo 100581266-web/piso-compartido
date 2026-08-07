@@ -1,4 +1,4 @@
-import { Receipt, Wallet, Repeat } from "lucide-react";
+import { Receipt, Wallet, Repeat, History } from "lucide-react";
 import { requireHousehold, getHouseholdMembers } from "@/lib/household";
 import { computeBalances, simplifyDebts } from "@/lib/debt-simplify";
 import { formatCents, formatDate } from "@/lib/format";
@@ -8,6 +8,7 @@ import { AddExpenseForm } from "./add-expense-form";
 import { SettleButton } from "./settle-button";
 import { ExpenseRowActions } from "./expense-row-actions";
 import { RecurringExpenses } from "./recurring-expenses";
+import { SettlementHistory } from "./settlement-history";
 import {
   Card,
   CardContent,
@@ -37,8 +38,9 @@ export default async function ExpensesPage() {
         .eq("household_id", household.id),
       supabase
         .from("settlements")
-        .select("from_user_id, to_user_id, amount_cents")
-        .eq("household_id", household.id),
+        .select("id, from_user_id, to_user_id, amount_cents, settled_at")
+        .eq("household_id", household.id)
+        .order("settled_at", { ascending: false }),
       supabase
         .from("recurring_expenses")
         .select("id, description, amount_cents, category, day_of_month, paid_by, active")
@@ -58,6 +60,12 @@ export default async function ExpensesPage() {
 
   const transactions = simplifyDebts(balances);
   const myBalance = balances.get(user.id) ?? 0;
+
+  const participantsByExpense = (shares ?? []).reduce<Record<string, string[]>>((acc, s) => {
+    acc[s.expense_id] = acc[s.expense_id] ?? [];
+    acc[s.expense_id].push(nameOf(s.user_id));
+    return acc;
+  }, {});
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-4">
@@ -158,16 +166,22 @@ export default async function ExpensesPage() {
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {transactions.map((t) => (
-              <div key={`${t.from}-${t.to}`} className="flex items-center justify-between gap-2 text-sm">
-                <span>
+              <div
+                key={`${t.from}-${t.to}`}
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <span className="text-sm">
                   {nameOf(t.from)} debe {formatCents(t.amountCents)} a {nameOf(t.to)}
                 </span>
-                {t.from === user.id && (
+                {(t.from === user.id || t.to === user.id) && (
                   <SettleButton
                     householdId={household.id}
+                    fromUserId={t.from}
+                    fromName={nameOf(t.from)}
                     toUserId={t.to}
                     toName={nameOf(t.to)}
                     amountCents={t.amountCents}
+                    perspective={t.from === user.id ? "debtor" : "creditor"}
                   />
                 )}
               </div>
@@ -175,6 +189,27 @@ export default async function ExpensesPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <div className="mb-1 flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <History className="size-4" />
+          </div>
+          <CardTitle className="text-base">Historial de pagos</CardTitle>
+          <CardDescription>Si un pago se queda descuadrado, puedes deshacerlo aquí</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SettlementHistory
+            settlements={(settlements ?? []).map((s) => ({
+              id: s.id,
+              fromName: nameOf(s.from_user_id),
+              toName: nameOf(s.to_user_id),
+              amount_cents: s.amount_cents,
+              settled_at: s.settled_at,
+            }))}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -192,18 +227,21 @@ export default async function ExpensesPage() {
           {(expenses ?? []).map((e) => {
             const category = (e.category ?? "otros") as ExpenseCategory;
             const CategoryIcon = CATEGORY_ICONS[category];
+            const participants = participantsByExpense[e.id] ?? [];
+            const participantsLabel =
+              participants.length === members.length ? "entre todos" : `entre ${participants.join(", ")}`;
             return (
               <div key={e.id} className="flex items-center gap-3 text-sm">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
                   <CategoryIcon className="size-4" />
                 </div>
-                <div className="flex-1">
+                <div className="min-w-0 flex-1">
                   <p className="font-medium">{e.description}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {nameOf(e.paid_by)} · {formatDate(e.expense_date)}
+                  <p className="truncate text-xs text-muted-foreground">
+                    Pagó {nameOf(e.paid_by)} · {participantsLabel} · {formatDate(e.expense_date)}
                   </p>
                 </div>
-                <span className="font-medium">{formatCents(e.amount_cents)}</span>
+                <span className="shrink-0 font-medium">{formatCents(e.amount_cents)}</span>
                 <ExpenseRowActions
                   expenseId={e.id}
                   description={e.description}

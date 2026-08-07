@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, RefreshCw } from "lucide-react";
+import { Check, Copy, RefreshCw, MessageCircle } from "lucide-react";
 import { regenerateInviteCode } from "@/app/actions/household";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -9,22 +9,32 @@ import { toast } from "sonner";
 export function InviteCode({
   code: initialCode,
   householdId,
+  householdName,
   isAdmin,
 }: {
   code: string;
   householdId: string;
+  householdName: string;
   isAdmin: boolean;
 }) {
   const [code, setCode] = useState(initialCode);
   const [copied, setCopied] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
+  function inviteLink() {
+    return `${window.location.origin}/join/${code}`;
+  }
+
   async function copyLink() {
-    const link = `${window.location.origin}/join/${code}`;
-    await navigator.clipboard.writeText(link);
+    await navigator.clipboard.writeText(inviteLink());
     setCopied(true);
     toast.success("Enlace de invitación copiado");
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function shareOnWhatsapp() {
+    const message = `Únete a nuestro piso "${householdName}" en Piso Compartido para llevar gastos, tareas y la compra: ${inviteLink()}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   }
 
   async function regenerate() {
@@ -45,26 +55,36 @@ export function InviteCode({
   }
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3">
-      <span className="font-mono text-lg tracking-widest text-primary">{code}</span>
-      <div className="ml-auto flex gap-2">
-        {isAdmin && (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={regenerate}
-            disabled={regenerating}
-            aria-label="Regenerar código"
-          >
-            <RefreshCw className="size-4" />
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 rounded-md border bg-muted/40 p-3">
+        <span className="font-mono text-lg tracking-widest text-primary">{code}</span>
+        <div className="ml-auto flex gap-2">
+          {isAdmin && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={regenerate}
+              disabled={regenerating}
+              aria-label="Regenerar código"
+            >
+              <RefreshCw className="size-4" />
+            </Button>
+          )}
+          <Button type="button" size="sm" variant="outline" onClick={copyLink}>
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            {copied ? "Copiado" : "Copiar"}
           </Button>
-        )}
-        <Button type="button" size="sm" variant="outline" onClick={copyLink}>
-          {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-          {copied ? "Copiado" : "Copiar enlace"}
-        </Button>
+        </div>
       </div>
+      <Button
+        type="button"
+        onClick={shareOnWhatsapp}
+        className="w-full bg-[#25D366] text-white hover:bg-[#25D366]/90"
+      >
+        <MessageCircle className="size-4" />
+        Invitar por WhatsApp
+      </Button>
     </div>
   );
 }

@@ -157,17 +157,15 @@ export async function recordSettlement(
   formData: FormData
 ): Promise<SettleFormState> {
   const householdId = String(formData.get("household_id") ?? "");
+  const fromUserId = String(formData.get("from_user_id") ?? "");
   const toUserId = String(formData.get("to_user_id") ?? "");
   const amountCents = Number(formData.get("amount_cents"));
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const { error } = await supabase.from("settlements").insert({
     household_id: householdId,
-    from_user_id: user!.id,
+    from_user_id: fromUserId,
     to_user_id: toUserId,
     amount_cents: amountCents,
   });
@@ -175,6 +173,16 @@ export async function recordSettlement(
   if (error) {
     return { error: "No se ha podido registrar el pago: " + error.message };
   }
+
+  revalidatePath("/household/expenses");
+  revalidatePath("/household");
+}
+
+export async function deleteSettlement(formData: FormData) {
+  const settlementId = String(formData.get("settlement_id") ?? "");
+
+  const supabase = await createClient();
+  await supabase.from("settlements").delete().eq("id", settlementId);
 
   revalidatePath("/household/expenses");
   revalidatePath("/household");
