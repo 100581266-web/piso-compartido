@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBalances, simplifyDebts, splitEqually } from "./debt-simplify";
+import { computeBalances, scaleShares, simplifyDebts, splitEqually } from "./debt-simplify";
 
 describe("splitEqually", () => {
   it("splits evenly when it divides cleanly", () => {
@@ -17,6 +17,60 @@ describe("splitEqually", () => {
       { userId: "b", shareCents: 333 },
       { userId: "c", shareCents: 333 },
     ]);
+    expect(shares.reduce((sum, s) => sum + s.shareCents, 0)).toBe(1000);
+  });
+});
+
+describe("scaleShares", () => {
+  it("keeps an equal split equal when the total changes", () => {
+    const shares = scaleShares(
+      [
+        { userId: "a", shareCents: 1000 },
+        { userId: "b", shareCents: 1000 },
+      ],
+      3000
+    );
+    expect(shares).toEqual([
+      { userId: "a", shareCents: 1500 },
+      { userId: "b", shareCents: 1500 },
+    ]);
+  });
+
+  it("preserves a custom, uneven split's proportions", () => {
+    // a paid 3x what b did (75/25 split), total goes from 4000 to 2000
+    const shares = scaleShares(
+      [
+        { userId: "a", shareCents: 3000 },
+        { userId: "b", shareCents: 1000 },
+      ],
+      2000
+    );
+    expect(shares).toEqual([
+      { userId: "a", shareCents: 1500 },
+      { userId: "b", shareCents: 500 },
+    ]);
+  });
+
+  it("always sums back to exactly the new total despite rounding", () => {
+    const shares = scaleShares(
+      [
+        { userId: "a", shareCents: 100 },
+        { userId: "b", shareCents: 100 },
+        { userId: "c", shareCents: 100 },
+      ],
+      1000
+    );
+    expect(shares.reduce((sum, s) => sum + s.shareCents, 0)).toBe(1000);
+  });
+
+  it("falls back to an equal split if the old total was zero", () => {
+    const shares = scaleShares(
+      [
+        { userId: "a", shareCents: 0 },
+        { userId: "b", shareCents: 0 },
+      ],
+      1000
+    );
     expect(shares.reduce((sum, s) => sum + s.shareCents, 0)).toBe(1000);
   });
 });

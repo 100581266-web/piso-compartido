@@ -74,7 +74,7 @@ export default async function ExpensesPage() {
             <Receipt className="size-4" />
           </div>
           <CardTitle className="text-base">Añadir gasto</CardTitle>
-          <CardDescription>Se reparte a partes iguales entre todos</CardDescription>
+          <CardDescription>A partes iguales o por importes exactos</CardDescription>
         </CardHeader>
         <CardContent>
           <AddExpenseForm householdId={household.id} members={members} />

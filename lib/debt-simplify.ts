@@ -40,6 +40,39 @@ export function splitEqually(
 }
 
 /**
+ * Rescales shares to a new total while preserving each user's relative
+ * proportion, using the largest-remainder method so the result always sums
+ * back to exactly newTotalCents (integer cents only, no floats leaking out).
+ */
+export function scaleShares(
+  shares: ExpenseShareInput[],
+  newTotalCents: number
+): ExpenseShareInput[] {
+  const oldTotal = shares.reduce((sum, s) => sum + s.shareCents, 0);
+  if (oldTotal === 0) {
+    return splitEqually(
+      newTotalCents,
+      shares.map((s) => s.userId)
+    );
+  }
+
+  const floored = shares.map((s) => {
+    const exact = (s.shareCents * newTotalCents) / oldTotal;
+    return { userId: s.userId, shareCents: Math.floor(exact), remainder: exact - Math.floor(exact) };
+  });
+
+  const allocated = floored.reduce((sum, f) => sum + f.shareCents, 0);
+  const remaining = newTotalCents - allocated;
+
+  const byRemainder = [...floored].sort((a, b) => b.remainder - a.remainder);
+  for (let i = 0; i < remaining; i++) {
+    byRemainder[i % byRemainder.length].shareCents += 1;
+  }
+
+  return floored.map((f) => ({ userId: f.userId, shareCents: f.shareCents }));
+}
+
+/**
  * Net balance per user: positive means the household owes them money,
  * negative means they owe the household money.
  */

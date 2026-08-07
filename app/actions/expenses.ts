@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { splitEqually } from "@/lib/debt-simplify";
+import { scaleShares, splitEqually, type ExpenseShareInput } from "@/lib/debt-simplify";
+import { getHouseholdMembers } from "@/lib/household";
 import { EXPENSE_CATEGORIES, type ExpenseCategory } from "@/lib/categories";
 
 function parseCategory(formData: FormData): ExpenseCategory {
@@ -21,16 +22,13 @@ export async function addExpense(
   const householdId = String(formData.get("household_id") ?? "");
   const description = String(formData.get("description") ?? "").trim();
   const amountEuros = Number(formData.get("amount"));
-  const participantIds = formData.getAll("participant_ids").map(String);
+  const splitMode = String(formData.get("split_mode") ?? "equal");
 
   if (!description) {
     return { error: "Ponle una descripción al gasto." };
   }
   if (!amountEuros || amountEuros <= 0) {
     return { error: "El importe no es válido." };
-  }
-  if (participantIds.length === 0) {
-    return { error: "Elige quién participa en este gasto." };
   }
 
   const amountCents = Math.round(amountEuros * 100);
@@ -39,6 +37,39 @@ export async function addExpense(
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  let shares: ExpenseShareInput[];
+
+  if (splitMode === "custom") {
+    const members = await getHouseholdMembers(supabase, householdId);
+    shares = members
+      .map((m) => ({
+        userId: m.userId,
+        shareCents: Math.round(Number(formData.get(`share_${m.userId}`) || 0) * 100),
+      }))
+      .filter((s) => s.shareCents > 0);
+
+    if (shares.length === 0) {
+      return { error: "Reparte el importe entre al menos una persona." };
+    }
+
+    const sharesTotal = shares.reduce((sum, s) => sum + s.shareCents, 0);
+    if (sharesTotal !== amountCents) {
+      const diff = (amountCents - sharesTotal) / 100;
+      return {
+        error:
+          diff > 0
+            ? `Faltan ${diff.toFixed(2)} € por repartir para que cuadre con el importe total.`
+            : `Sobran ${(-diff).toFixed(2)} € repartidos de más.`,
+      };
+    }
+  } else {
+    const participantIds = formData.getAll("participant_ids").map(String);
+    if (participantIds.length === 0) {
+      return { error: "Elige quién participa en este gasto." };
+    }
+    shares = splitEqually(amountCents, participantIds);
+  }
 
   const { data: expense, error: expenseError } = await supabase
     .from("expenses")
@@ -56,8 +87,6 @@ export async function addExpense(
   if (expenseError) {
     return { error: "No se ha podido guardar el gasto: " + expenseError.message };
   }
-
-  const shares = splitEqually(amountCents, participantIds);
 
   const { error: sharesError } = await supabase.from("expense_shares").insert(
     shares.map((s) => ({
@@ -96,7 +125,7 @@ export async function updateExpense(
 
   const { data: existingShares, error: fetchError } = await supabase
     .from("expense_shares")
-    .select("user_id")
+    .select("user_id, share_cents")
     .eq("expense_id", expenseId);
 
   if (fetchError || !existingShares) {
@@ -112,9 +141,12 @@ export async function updateExpense(
     return { error: "No se ha podido actualizar el gasto: " + updateError.message };
   }
 
-  const newShares = splitEqually(
-    amountCents,
-    existingShares.map((s) => s.user_id)
+  // Reescala cada reparto proporcionalmente al nuevo importe, en vez de
+  // volver a repartir a partes iguales, para no romper un reparto por
+  // importes exactos que ya tuviera el gasto.
+  const newShares = scaleShares(
+    existingShares.map((s) => ({ userId: s.user_id, shareCents: s.share_cents })),
+    amountCents
   );
 
   for (const share of newShares) {
