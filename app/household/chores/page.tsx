@@ -89,6 +89,7 @@ export default async function ChoresPage() {
                   const chore = a.chores as unknown as {
                     name: string;
                     recurrence_days: number;
+                    rotation_order: string[];
                   } | null;
                   const overdue = isOverdue(a.due_date);
                   const today = isToday(a.due_date);
@@ -114,8 +115,11 @@ export default async function ChoresPage() {
                           </Badge>
                           <ChoreRowActions
                             choreId={a.chore_id}
+                            householdId={household.id}
                             name={chore?.name ?? ""}
                             recurrenceDays={chore?.recurrence_days ?? 7}
+                            rotationOrder={chore?.rotation_order ?? []}
+                            members={members}
                           />
                         </div>
                         {a.assigned_to === user.id && (

@@ -70,8 +70,10 @@ export async function updateChore(
   formData: FormData
 ): Promise<ChoreFormState> {
   const choreId = String(formData.get("chore_id") ?? "");
+  const householdId = String(formData.get("household_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const recurrenceDays = Number(formData.get("recurrence_days"));
+  const rotationOrder = formData.getAll("rotation_order").map(String);
 
   if (!name) {
     return { error: "Ponle un nombre a la tarea." };
@@ -79,11 +81,25 @@ export async function updateChore(
   if (!recurrenceDays || recurrenceDays <= 0) {
     return { error: "Indica cada cuántos días se repite." };
   }
+  if (rotationOrder.length === 0) {
+    return { error: "Elige quién forma parte de la rotación." };
+  }
 
   const supabase = await createClient();
+
+  // No confiamos en la lista que manda el cliente: solo se pueden incluir
+  // en la rotación miembros que de verdad están en el piso ahora mismo.
+  const members = await getHouseholdMembers(supabase, householdId);
+  const memberIds = new Set(members.map((m) => m.userId));
+  const validRotationOrder = rotationOrder.filter((id) => memberIds.has(id));
+
+  if (validRotationOrder.length === 0) {
+    return { error: "Elige quién forma parte de la rotación." };
+  }
+
   const { error } = await supabase
     .from("chores")
-    .update({ name, recurrence_days: recurrenceDays })
+    .update({ name, recurrence_days: recurrenceDays, rotation_order: validRotationOrder })
     .eq("id", choreId);
 
   if (error) {

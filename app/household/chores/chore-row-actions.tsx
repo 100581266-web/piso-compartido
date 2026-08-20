@@ -7,6 +7,7 @@ import { deleteChore, updateChore } from "@/app/actions/chores";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -19,12 +20,18 @@ import {
 
 export function ChoreRowActions({
   choreId,
+  householdId,
   name,
   recurrenceDays,
+  rotationOrder,
+  members,
 }: {
   choreId: string;
+  householdId: string;
   name: string;
   recurrenceDays: number;
+  rotationOrder: string[];
+  members: { userId: string; displayName: string }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -68,6 +75,7 @@ export function ChoreRowActions({
         <DialogContent>
           <form onSubmit={handleSubmit}>
             <input type="hidden" name="chore_id" value={choreId} />
+            <input type="hidden" name="household_id" value={householdId} />
             <DialogHeader>
               <DialogTitle>Editar tarea</DialogTitle>
               <DialogDescription>
@@ -89,6 +97,21 @@ export function ChoreRowActions({
                   defaultValue={recurrenceDays}
                   required
                 />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>¿Quién entra en la rotación?</Label>
+                <div className="flex flex-col gap-2">
+                  {members.map((m) => (
+                    <label key={m.userId} className="flex items-center gap-2 text-sm">
+                      <Checkbox
+                        name="rotation_order"
+                        value={m.userId}
+                        defaultChecked={rotationOrder.includes(m.userId)}
+                      />
+                      {m.displayName}
+                    </label>
+                  ))}
+                </div>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
             </div>
