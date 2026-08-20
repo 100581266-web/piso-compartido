@@ -21,8 +21,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 export default async function ExpensesPage() {
   const { supabase, user, household } = await requireHousehold();
   const members = await getHouseholdMembers(supabase, household.id);
-  const nameOf = (userId: string) =>
-    members.find((m) => m.userId === userId)?.displayName ?? "—";
 
   const [{ data: expenses }, { data: shares }, { data: settlements }, { data: recurring }] =
     await Promise.all([
@@ -47,6 +45,32 @@ export default async function ExpensesPage() {
         .eq("household_id", household.id)
         .order("created_at", { ascending: true }),
     ]);
+
+  // Gastos/repartos/liquidaciones históricos pueden involucrar a alguien
+  // que ya no está en el piso: resolvemos su nombre real desde profiles en
+  // vez de mostrar "—", para no perder de vista con quién queda un saldo.
+  const memberIds = new Set(members.map((m) => m.userId));
+  const departedIds = new Set<string>();
+  for (const e of expenses ?? []) if (!memberIds.has(e.paid_by)) departedIds.add(e.paid_by);
+  for (const s of shares ?? []) if (!memberIds.has(s.user_id)) departedIds.add(s.user_id);
+  for (const s of settlements ?? []) {
+    if (!memberIds.has(s.from_user_id)) departedIds.add(s.from_user_id);
+    if (!memberIds.has(s.to_user_id)) departedIds.add(s.to_user_id);
+  }
+
+  const departedNames: Record<string, string> = {};
+  if (departedIds.size > 0) {
+    const { data: departedProfiles } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", Array.from(departedIds));
+    for (const p of departedProfiles ?? []) {
+      departedNames[p.id] = (p.display_name || "Sin nombre") + " (ya no está en el piso)";
+    }
+  }
+
+  const nameOf = (userId: string) =>
+    members.find((m) => m.userId === userId)?.displayName ?? departedNames[userId] ?? "—";
 
   const balances = computeBalances(
     (expenses ?? []).map((e) => ({ paidBy: e.paid_by, amountCents: e.amount_cents })),
