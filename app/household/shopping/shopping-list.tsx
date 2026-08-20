@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Users, User, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Users, User, X, Pencil, Check } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { groceryEmoji } from "@/lib/emoji-match";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,9 @@ export function ShoppingList({
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState("");
   const [scope, setScope] = useState<"shared" | "personal">("shared");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editQuantity, setEditQuantity] = useState("");
 
   useEffect(() => {
     const supabase = createClient();
@@ -109,6 +112,29 @@ export function ShoppingList({
     await supabase.from("shopping_items").delete().eq("id", id);
   }
 
+  function startEditing(item: ShoppingItem) {
+    setEditingId(item.id);
+    setEditName(item.name);
+    setEditQuantity(item.quantity ?? "");
+  }
+
+  function cancelEditing() {
+    setEditingId(null);
+  }
+
+  async function saveEditing(id: string) {
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+
+    const supabase = createClient();
+    await supabase
+      .from("shopping_items")
+      .update({ name: trimmed, quantity: editQuantity.trim() || null })
+      .eq("id", id);
+
+    setEditingId(null);
+  }
+
   const shared = items.filter((i) => !i.owner_user_id);
   const mine = items.filter((i) => i.owner_user_id === currentUserId);
   const others = items.filter(
@@ -120,6 +146,17 @@ export function ShoppingList({
     acc[key].push(item);
     return acc;
   }, {});
+
+  const editingProps = {
+    editingId,
+    editName,
+    editQuantity,
+    onEditNameChange: setEditName,
+    onEditQuantityChange: setEditQuantity,
+    onStartEdit: startEditing,
+    onSaveEdit: saveEditing,
+    onCancelEdit: cancelEditing,
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -171,6 +208,7 @@ export function ShoppingList({
         editable
         onToggle={toggleItem}
         onDelete={deleteItem}
+        {...editingProps}
       />
 
       <ShoppingGroup
@@ -179,6 +217,7 @@ export function ShoppingList({
         editable
         onToggle={toggleItem}
         onDelete={deleteItem}
+        {...editingProps}
       />
 
       {Object.entries(othersByOwner).map(([ownerId, ownerItems]) => (
@@ -199,41 +238,151 @@ function ShoppingGroup({
   editable,
   onToggle,
   onDelete,
+  editingId,
+  editName,
+  editQuantity,
+  onEditNameChange,
+  onEditQuantityChange,
+  onStartEdit,
+  onSaveEdit,
+  onCancelEdit,
 }: {
   title: string;
   items: ShoppingItem[];
   editable: boolean;
   onToggle?: (item: ShoppingItem) => void;
   onDelete?: (id: string) => void;
+  editingId?: string | null;
+  editName?: string;
+  editQuantity?: string;
+  onEditNameChange?: (value: string) => void;
+  onEditQuantityChange?: (value: string) => void;
+  onStartEdit?: (item: ShoppingItem) => void;
+  onSaveEdit?: (id: string) => void;
+  onCancelEdit?: () => void;
 }) {
   if (items.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-medium text-muted-foreground">{title}</p>
-      {items.map((item) => (
-        <div key={item.id} className="flex items-center gap-2 text-sm">
-          <Checkbox
-            checked={item.is_checked}
-            disabled={!editable}
-            onCheckedChange={() => editable && onToggle?.(item)}
-          />
-          <span className={cn("flex-1", item.is_checked && "text-muted-foreground line-through")}>
-            {groceryEmoji(item.name)} {item.name}
-            {item.quantity ? ` (${item.quantity})` : ""}
-          </span>
-          {editable && (
-            <button
-              type="button"
-              onClick={() => onDelete?.(item.id)}
-              aria-label="Quitar"
-              className="text-muted-foreground hover:text-destructive"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
-      ))}
+      {items.map((item) => {
+        const isEditing = editable && editingId === item.id;
+
+        if (isEditing) {
+          return (
+            <EditingRow
+              key={item.id}
+              name={editName ?? ""}
+              quantity={editQuantity ?? ""}
+              onNameChange={(v) => onEditNameChange?.(v)}
+              onQuantityChange={(v) => onEditQuantityChange?.(v)}
+              onSave={() => onSaveEdit?.(item.id)}
+              onCancel={() => onCancelEdit?.()}
+            />
+          );
+        }
+
+        return (
+          <div key={item.id} className="flex items-center gap-2 text-sm">
+            <Checkbox
+              checked={item.is_checked}
+              disabled={!editable}
+              onCheckedChange={() => editable && onToggle?.(item)}
+            />
+            <span className={cn("flex-1", item.is_checked && "text-muted-foreground line-through")}>
+              {groceryEmoji(item.name)} {item.name}
+              {item.quantity ? ` (${item.quantity})` : ""}
+            </span>
+            {editable && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onStartEdit?.(item)}
+                  aria-label="Editar"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete?.(item.id)}
+                  aria-label="Quitar"
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <X className="size-4" />
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EditingRow({
+  name,
+  quantity,
+  onNameChange,
+  onQuantityChange,
+  onSave,
+  onCancel,
+}: {
+  name: string;
+  quantity: string;
+  onNameChange: (value: string) => void;
+  onQuantityChange: (value: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSave();
+    } else if (e.key === "Escape") {
+      onCancel();
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        ref={nameRef}
+        value={name}
+        onChange={(e) => onNameChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        className="h-8 flex-1"
+      />
+      <Input
+        value={quantity}
+        onChange={(e) => onQuantityChange(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Cantidad"
+        className="h-8 w-20"
+      />
+      <button
+        type="button"
+        onClick={onSave}
+        aria-label="Guardar"
+        className="text-primary hover:text-primary/80"
+      >
+        <Check className="size-4" />
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        aria-label="Cancelar"
+        className="text-muted-foreground hover:text-destructive"
+      >
+        <X className="size-4" />
+      </button>
     </div>
   );
 }
