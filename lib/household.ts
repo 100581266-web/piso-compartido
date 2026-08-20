@@ -63,3 +63,35 @@ export async function getHouseholdMembers(
     };
   });
 }
+
+/**
+ * Builds a name lookup covering both current members and anyone who shows
+ * up in userIds but has since left/been removed (resolved from profiles
+ * directly), so historical expenses/settlements still show a real name
+ * instead of "—".
+ */
+export async function resolveNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  members: HouseholdMember[],
+  userIds: Iterable<string>
+): Promise<(userId: string) => string> {
+  const memberIds = new Set(members.map((m) => m.userId));
+  const missingIds = new Set<string>();
+  for (const id of userIds) {
+    if (!memberIds.has(id)) missingIds.add(id);
+  }
+
+  const departedNames: Record<string, string> = {};
+  if (missingIds.size > 0) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .in("id", Array.from(missingIds));
+    for (const p of data ?? []) {
+      departedNames[p.id] = (p.display_name || "Sin nombre") + " (ya no está en el piso)";
+    }
+  }
+
+  return (userId: string) =>
+    members.find((m) => m.userId === userId)?.displayName ?? departedNames[userId] ?? "—";
+}
