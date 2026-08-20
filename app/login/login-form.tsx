@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Home, Mail } from "lucide-react";
+import { Home, Mail, KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,11 +19,12 @@ import { toast } from "sonner";
 export function LoginForm() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/";
+  const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function sendCode(e: React.SyntheticEvent) {
     e.preventDefault();
     setLoading(true);
 
@@ -41,11 +42,31 @@ export function LoginForm() {
     setLoading(false);
 
     if (error) {
-      toast.error("No se ha podido enviar el enlace: " + error.message);
+      toast.error("No se ha podido enviar el código: " + error.message);
       return;
     }
 
-    setSent(true);
+    setStep("code");
+  }
+
+  async function verifyCode(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+
+    const supabase = createClient();
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: "email",
+    });
+
+    if (error) {
+      setLoading(false);
+      toast.error("Código incorrecto o caducado.");
+      return;
+    }
+
+    window.location.href = next;
   }
 
   return (
@@ -57,14 +78,14 @@ export function LoginForm() {
         <CardHeader>
           <CardTitle>Piso Compartido</CardTitle>
           <CardDescription>
-            {sent
-              ? "Revisa tu correo y pulsa el enlace para entrar."
-              : "Escribe tu email y te mandamos un enlace para entrar, sin contraseña."}
+            {step === "email"
+              ? "Escribe tu email y te mandamos un código para entrar, sin contraseña."
+              : `Escribe el código de 6 dígitos que le hemos mandado a ${email}.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!sent && (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {step === "email" ? (
+            <form onSubmit={sendCode} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -79,8 +100,51 @@ export function LoginForm() {
               </div>
               <Button type="submit" disabled={loading || !email}>
                 <Mail className="size-4" />
-                {loading ? "Enviando..." : "Enviar enlace mágico"}
+                {loading ? "Enviando..." : "Enviar código"}
               </Button>
+            </form>
+          ) : (
+            <form onSubmit={verifyCode} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="code">Código</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  maxLength={6}
+                  className="text-center text-2xl tracking-[0.5em]"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  required
+                  autoFocus
+                />
+              </div>
+              <Button type="submit" disabled={loading || code.length !== 6}>
+                <KeyRound className="size-4" />
+                {loading ? "Comprobando..." : "Entrar"}
+              </Button>
+              <div className="flex justify-between text-sm">
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:underline"
+                  onClick={() => {
+                    setStep("email");
+                    setCode("");
+                  }}
+                >
+                  Cambiar email
+                </button>
+                <button
+                  type="button"
+                  className="text-primary hover:underline"
+                  onClick={sendCode}
+                  disabled={loading}
+                >
+                  Reenviar código
+                </button>
+              </div>
             </form>
           )}
         </CardContent>
