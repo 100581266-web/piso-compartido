@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "@/components/ui/sonner";
 import { InstallPrompt } from "@/components/install-prompt";
 import { RegisterServiceWorker } from "@/components/register-service-worker";
@@ -42,6 +43,7 @@ export default function RootLayout({
           <Toaster />
           <InstallPrompt />
           <RegisterServiceWorker />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
