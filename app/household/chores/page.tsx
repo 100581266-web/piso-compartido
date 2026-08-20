@@ -1,6 +1,6 @@
-import { ListChecks, SprayCan } from "lucide-react";
+import { ListChecks, SprayCan, History } from "lucide-react";
 import { requireHousehold, getHouseholdMembers } from "@/lib/household";
-import { formatDate, isOverdue, isToday } from "@/lib/format";
+import { formatDate, isOverdue, isToday, daysLate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { AddChoreForm } from "./add-chore-form";
 import { CompleteChoreButton } from "./complete-chore-button";
@@ -31,6 +31,27 @@ export default async function ChoresPage() {
     .eq("household_id", household.id)
     .eq("status", "pending")
     .order("due_date", { ascending: true });
+
+  const { data: history } = await supabase
+    .from("chore_assignments")
+    .select("id, due_date, completed_at, completed_by, chores(name)")
+    .eq("household_id", household.id)
+    .eq("status", "done")
+    .order("completed_at", { ascending: false })
+    .limit(30);
+
+  const historyRows = (history ?? []).map((h) => {
+    const chore = h.chores as unknown as { name: string } | null;
+    const late = h.completed_at ? daysLate(h.due_date, h.completed_at) : 0;
+    return {
+      id: h.id,
+      choreName: chore?.name ?? "",
+      completedBy: nameOf(h.completed_by ?? ""),
+      completedAt: h.completed_at as string,
+      late,
+    };
+  });
+  const onTimeCount = historyRows.filter((h) => h.late <= 0).length;
 
   const calendarChores = (assignments ?? []).map((a) => {
     const chore = a.chores as unknown as {
@@ -72,6 +93,9 @@ export default async function ChoresPage() {
               </TabsTrigger>
               <TabsTrigger value="calendar" className="flex-1">
                 Calendario
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-1">
+                Historial
               </TabsTrigger>
             </TabsList>
 
@@ -151,6 +175,42 @@ export default async function ChoresPage() {
                   memberIndex={memberIndex}
                   memberNames={memberNames}
                 />
+              )}
+            </TabsContent>
+
+            <TabsContent value="history">
+              {historyRows.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 py-6 text-center">
+                  <History className="size-8 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">
+                    Todavía no se ha completado ninguna tarea.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <p className="text-xs text-muted-foreground">
+                    {onTimeCount} de {historyRows.length} a tiempo
+                  </p>
+                  {historyRows.map((h) => (
+                    <div key={h.id} className="flex items-center gap-3 text-sm">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-base">
+                        {choreEmoji(h.choreName)}
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium">{h.choreName}</p>
+                        <p className="text-muted-foreground">
+                          {h.completedBy} · {formatDate(h.completedAt.slice(0, 10))}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={h.late > 0 ? "destructive" : "secondary"}
+                        className={cn(h.late <= 0 && "text-muted-foreground")}
+                      >
+                        {h.late > 0 ? `${h.late} día${h.late === 1 ? "" : "s"} tarde` : "A tiempo"}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
               )}
             </TabsContent>
           </Tabs>

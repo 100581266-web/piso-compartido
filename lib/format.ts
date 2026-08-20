@@ -31,6 +31,16 @@ export function isToday(dateStr: string): boolean {
   return parseDateOnly(dateStr).getTime() === today.getTime();
 }
 
+/** How many days late a chore was completed: 0 or negative means on time
+ * (completed on or before its due date), positive means that many days
+ * late. */
+export function daysLate(dueDateStr: string, completedAtIso: string): number {
+  const due = parseDateOnly(dueDateStr);
+  const completed = new Date(completedAtIso);
+  completed.setHours(0, 0, 0, 0);
+  return Math.round((completed.getTime() - due.getTime()) / 86_400_000);
+}
+
 export function formatRelativeTime(isoString: string): string {
   const diffMs = Date.now() - new Date(isoString).getTime();
   const diffMinutes = Math.round(diffMs / 60000);
