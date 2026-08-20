@@ -6,8 +6,15 @@ import { addChore } from "@/app/actions/chores";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 
-export function AddChoreForm({ householdId }: { householdId: string }) {
+export function AddChoreForm({
+  householdId,
+  members,
+}: {
+  householdId: string;
+  members: { userId: string; displayName: string }[];
+}) {
   const [state, action, pending] = useActionState(addChore, undefined);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -35,6 +42,17 @@ export function AddChoreForm({ householdId }: { householdId: string }) {
           defaultValue="7"
           required
         />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label>¿Quién entra en la rotación?</Label>
+        <div className="flex flex-col gap-2">
+          {members.map((m) => (
+            <label key={m.userId} className="flex items-center gap-2 text-sm">
+              <Checkbox name="rotation_order" value={m.userId} defaultChecked />
+              {m.displayName}
+            </label>
+          ))}
+        </div>
       </div>
       {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
       <Button type="submit" disabled={pending}>

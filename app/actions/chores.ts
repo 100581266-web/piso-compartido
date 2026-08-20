@@ -14,6 +14,7 @@ export async function addChore(
   const householdId = String(formData.get("household_id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const recurrenceDays = Number(formData.get("recurrence_days"));
+  const requestedRotation = formData.getAll("rotation_order").map(String);
 
   if (!name) {
     return { error: "Ponle un nombre a la tarea." };
@@ -32,7 +33,14 @@ export async function addChore(
     return { error: "No hay compañeros en este piso todavía." };
   }
 
-  const rotationOrder = members.map((m) => m.userId);
+  // No confiamos en la lista que manda el cliente: solo entran en la
+  // rotación miembros que de verdad están en el piso ahora mismo.
+  const memberIds = new Set(members.map((m) => m.userId));
+  const rotationOrder = requestedRotation.filter((id) => memberIds.has(id));
+
+  if (rotationOrder.length === 0) {
+    return { error: "Elige quién forma parte de la rotación." };
+  }
 
   const { data: chore, error: choreError } = await supabase
     .from("chores")

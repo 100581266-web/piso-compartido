@@ -56,10 +56,10 @@ export default async function ChoresPage() {
             <ListChecks className="size-4" />
           </div>
           <CardTitle className="text-base">Añadir tarea</CardTitle>
-          <CardDescription>Se rota entre todos los compañeros</CardDescription>
+          <CardDescription>Elige entre quién se rota</CardDescription>
         </CardHeader>
         <CardContent>
-          <AddChoreForm householdId={household.id} />
+          <AddChoreForm householdId={household.id} members={members} />
         </CardContent>
       </Card>
 
