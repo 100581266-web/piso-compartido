@@ -208,7 +208,7 @@ export default async function ExpensesPage() {
               render={<a href="/household/expenses/export" download />}
             >
               <Download className="size-3.5" />
-              CSV
+              Excel
             </Button>
           </CardAction>
         </CardHeader>

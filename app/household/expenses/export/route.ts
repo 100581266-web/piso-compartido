@@ -1,6 +1,26 @@
+import ExcelJS from "exceljs";
 import { requireHousehold, getHouseholdMembers, resolveNames } from "@/lib/household";
-import { CATEGORY_LABELS, type ExpenseCategory } from "@/lib/categories";
-import { toCsv } from "@/lib/csv";
+import {
+  CATEGORY_HEX,
+  CATEGORY_LABELS,
+  EXPENSE_CATEGORIES,
+  type ExpenseCategory,
+} from "@/lib/categories";
+
+const HEADER_FILL: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FF1F2933" },
+};
+const STRIPE_FILL: ExcelJS.Fill = {
+  type: "pattern",
+  pattern: "solid",
+  fgColor: { argb: "FFF3F4F6" },
+};
+
+function hexToArgb(hex: string): string {
+  return "FF" + hex.replace("#", "").toUpperCase();
+}
 
 export async function GET() {
   const { supabase, household } = await requireHousehold();
@@ -31,25 +51,103 @@ export async function GET() {
     return acc;
   }, {});
 
-  const rows = (expenses ?? []).map((e) => [
-    e.expense_date,
-    e.description,
-    CATEGORY_LABELS[(e.category ?? "otros") as ExpenseCategory],
-    (e.amount_cents / 100).toFixed(2),
-    nameOf(e.paid_by),
-    (participantsByExpense[e.id] ?? []).join("; "),
-  ]);
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Piso Compartido";
+  workbook.created = new Date();
 
-  const csv = toCsv(
-    ["Fecha", "Descripción", "Categoría", "Importe (€)", "Pagado por", "Repartido entre"],
-    rows
-  );
+  // ---- Hoja "Gastos": una fila por gasto, fácil de escanear de un vistazo ----
+  const sheet = workbook.addWorksheet("Gastos", { views: [{ state: "frozen", ySplit: 1 }] });
+  sheet.columns = [
+    { header: "Fecha", key: "date", width: 12 },
+    { header: "Descripción", key: "description", width: 32 },
+    { header: "Categoría", key: "category", width: 16 },
+    { header: "Importe", key: "amount", width: 14 },
+    { header: "Pagado por", key: "paidBy", width: 22 },
+    { header: "Repartido entre", key: "participants", width: 36 },
+  ];
+  sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
+  sheet.getRow(1).fill = HEADER_FILL;
+  sheet.getRow(1).alignment = { vertical: "middle" };
+  sheet.autoFilter = { from: "A1", to: "F1" };
 
-  const filename = `gastos-${household.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
+  let total = 0;
+  for (const e of expenses ?? []) {
+    const category = (e.category ?? "otros") as ExpenseCategory;
+    total += e.amount_cents;
 
-  return new Response(csv, {
+    const row = sheet.addRow({
+      date: new Date(e.expense_date + "T00:00:00"),
+      description: e.description,
+      category: CATEGORY_LABELS[category],
+      amount: e.amount_cents / 100,
+      paidBy: nameOf(e.paid_by),
+      participants: (participantsByExpense[e.id] ?? []).join(", "),
+    });
+
+    row.getCell("date").numFmt = "dd/mm/yyyy";
+    row.getCell("amount").numFmt = "#,##0.00 €";
+    row.getCell("amount").alignment = { horizontal: "right" };
+    row.getCell("category").font = { color: { argb: hexToArgb(CATEGORY_HEX[category]) }, bold: true };
+
+    if (row.number % 2 === 0) {
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        cell.fill = STRIPE_FILL;
+      });
+    }
+  }
+
+  if ((expenses ?? []).length === 0) {
+    sheet.addRow({ description: "Todavía no hay gastos en este piso." });
+  } else {
+    const totalRow = sheet.addRow({ description: "Total", amount: total / 100 });
+    totalRow.font = { bold: true };
+    totalRow.getCell("amount").numFmt = "#,##0.00 €";
+    totalRow.getCell("amount").alignment = { horizontal: "right" };
+  }
+
+  // ---- Hoja "Resumen": totales por categoría y por persona ----
+  const summary = workbook.addWorksheet("Resumen");
+  summary.columns = [
+    { key: "label", width: 28 },
+    { key: "value", width: 16 },
+  ];
+
+  const titleRow = summary.addRow(["Total gastado por el piso", total / 100]);
+  titleRow.font = { bold: true, size: 13 };
+  titleRow.getCell(2).numFmt = "#,##0.00 €";
+  summary.addRow([]);
+
+  summary.addRow(["Por categoría"]).font = { bold: true };
+  const byCategory = new Map<ExpenseCategory, number>();
+  for (const e of expenses ?? []) {
+    const category = (e.category ?? "otros") as ExpenseCategory;
+    byCategory.set(category, (byCategory.get(category) ?? 0) + e.amount_cents);
+  }
+  for (const category of EXPENSE_CATEGORIES) {
+    const amount = byCategory.get(category) ?? 0;
+    if (amount === 0) continue;
+    const row = summary.addRow([CATEGORY_LABELS[category], amount / 100]);
+    row.getCell(1).font = { color: { argb: hexToArgb(CATEGORY_HEX[category]) }, bold: true };
+    row.getCell(2).numFmt = "#,##0.00 €";
+  }
+  summary.addRow([]);
+
+  summary.addRow(["Por persona (total pagado)"]).font = { bold: true };
+  const paidByPerson = new Map<string, number>();
+  for (const e of expenses ?? []) {
+    paidByPerson.set(e.paid_by, (paidByPerson.get(e.paid_by) ?? 0) + e.amount_cents);
+  }
+  for (const [userId, amount] of paidByPerson) {
+    const row = summary.addRow([nameOf(userId), amount / 100]);
+    row.getCell(2).numFmt = "#,##0.00 €";
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const filename = `gastos-${household.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.xlsx`;
+
+  return new Response(buffer, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

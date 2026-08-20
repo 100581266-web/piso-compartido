@@ -28,3 +28,14 @@ export const CATEGORY_ICONS: Record<ExpenseCategory, LucideIcon> = {
   transporte: Bus,
   otros: Package,
 };
+
+/** Same categorical palette used in Stats' charts, so a category reads as
+ * the same color everywhere in the app (and in the exported spreadsheet). */
+export const CATEGORY_HEX: Record<ExpenseCategory, string> = {
+  comida: "#2a78d6",
+  suministros: "#eb6834",
+  ocio: "#1baf7a",
+  hogar: "#eda100",
+  transporte: "#e87ba4",
+  otros: "#008300",
+};
