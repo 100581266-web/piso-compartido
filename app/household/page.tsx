@@ -170,6 +170,13 @@ export default async function HouseholdPage() {
           Cerrar sesión
         </Button>
       </form>
+
+      <Link
+        href="/privacy"
+        className="text-center text-xs text-muted-foreground hover:underline"
+      >
+        Política de privacidad
+      </Link>
     </div>
   );
 }
