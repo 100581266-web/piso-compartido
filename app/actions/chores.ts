@@ -66,6 +66,9 @@ export async function addChore(
   });
 
   if (assignmentError) {
+    // Sin una asignación, la tarea quedaría creada pero invisible (nunca
+    // aparecería en la lista de pendientes): mejor deshacerla.
+    await supabase.from("chores").delete().eq("id", chore.id);
     return { error: "No se ha podido asignar la tarea: " + assignmentError.message };
   }
 

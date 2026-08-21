@@ -32,6 +32,7 @@ export async function requireHousehold() {
     .from("household_members")
     .select("household_id, households(id, name, invite_code)")
     .eq("user_id", user!.id)
+    .order("joined_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 

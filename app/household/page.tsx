@@ -18,7 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { signOut } from "@/app/actions/auth";
-import { leaveHousehold } from "@/app/actions/household";
+import { LeaveHouseholdButton } from "./leave-household-button";
 
 export default async function HouseholdPage() {
   const { supabase, user, household } = await requireHousehold();
@@ -158,12 +158,7 @@ export default async function HouseholdPage() {
         </CardContent>
       </Card>
 
-      <form action={leaveHousehold}>
-        <input type="hidden" name="household_id" value={household.id} />
-        <Button type="submit" variant="outline" className="w-full">
-          Salir del piso
-        </Button>
-      </form>
+      <LeaveHouseholdButton householdId={household.id} />
 
       <form action={signOut}>
         <Button type="submit" variant="ghost" className="w-full">

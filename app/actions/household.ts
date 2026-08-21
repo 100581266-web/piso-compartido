@@ -42,7 +42,7 @@ export async function joinHousehold(
   });
 
   if (error) {
-    return { error: "Código no válido: " + error.message };
+    return { error: error.message };
   }
 
   redirect("/household");
@@ -113,11 +113,18 @@ export async function removeMember(
   revalidatePath("/household");
 }
 
-export async function leaveHousehold(formData: FormData) {
+export async function leaveHousehold(
+  _prevState: HouseholdFormState,
+  formData: FormData
+): Promise<HouseholdFormState> {
   const householdId = String(formData.get("household_id") ?? "");
 
   const supabase = await createClient();
-  await supabase.rpc("leave_household", { _household_id: householdId });
+  const { error } = await supabase.rpc("leave_household", { _household_id: householdId });
+
+  if (error) {
+    return { error: "No se ha podido salir del piso: " + error.message };
+  }
 
   redirect("/onboarding");
 }

@@ -98,6 +98,9 @@ export async function addExpense(
   );
 
   if (sharesError) {
+    // Sin el reparto, el gasto quedaría contando de más para quien lo pagó
+    // sin que nadie más lo deba: mejor deshacerlo que dejarlo a medias.
+    await supabase.from("expenses").delete().eq("id", expense.id);
     return { error: "No se ha podido repartir el gasto: " + sharesError.message };
   }
 
