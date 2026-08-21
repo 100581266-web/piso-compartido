@@ -1,12 +1,16 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
+import { DemoLoginButton } from "./demo-login-button";
 
 export default function LoginPage() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 p-4">
       <Suspense fallback={null}>
         <LoginForm />
+      </Suspense>
+      <Suspense fallback={null}>
+        <DemoLoginButton />
       </Suspense>
       <Link href="/privacy" className="text-xs text-muted-foreground hover:underline">
         Política de privacidad
