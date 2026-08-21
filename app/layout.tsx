@@ -18,8 +18,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://piso-compartido.vercel.app"),
   title: "Piso Compartido",
   description: "Gastos, tareas y compra compartidos entre compañeros de piso",
+  openGraph: {
+    title: "Piso Compartido",
+    description: "Gastos, tareas y compra compartidos entre compañeros de piso",
+    url: "https://piso-compartido.vercel.app",
+    siteName: "Piso Compartido",
+    locale: "es_ES",
+    type: "website",
+  },
 };
 
 export const viewport = {
